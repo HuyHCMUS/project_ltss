@@ -121,3 +121,4 @@ int main(){
       Matrix target_batch = one_hot_encode(label_batch, 10);
     }
 }
+}
