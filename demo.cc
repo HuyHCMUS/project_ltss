@@ -11,6 +11,9 @@
 #include "src/layer.h"
 #include "src/layer/conv.h"
 #include "src/layer/conv_gpu.h"
+#include "src/layer/conv_gpu1.h"
+
+
 #include "src/layer/fully_connected.h"
 #include "src/layer/ave_pooling.h"
 #include "src/layer/max_pooling.h"
@@ -56,6 +59,12 @@ int main(int argc, char* argv[]) {
     if (strcmp(device, "gpu") == 0) {
       return (Layer *)new ConvGPU(a, b, c, d, e, f, g, h, i);
     }
+    if (strcmp(device, "gpu_optimize") == 0) {
+      return (Layer *)new ConvGPU1(a, b, c, d, e, f, g, h, i);
+    }
+
+    
+    
     
     throw std::invalid_argument("unknown device: " + std::string(device));
   };
@@ -77,19 +86,18 @@ int main(int argc, char* argv[]) {
     }
 
     Layer *base = new Conv(1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
+    base->set_parameters(params);
     Layer *comp = make_conv_layer(1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
+    comp->set_parameters(params);
 
     // Get one sample to test
     Matrix sample = dataset.train_data.col(0);
-    
     std::cout << "Input: " << sample.rows() << "x" << sample.cols() << std::endl;
 
     std::cout << "Running with base layer..." << std::endl;
-    base->set_parameters(params);
     base->forward(sample);
 
     std::cout << "Running with selected layer..." << std::endl;
-    comp->set_parameters(params);
     comp->forward(sample);
 
     std::cout << "Base output: " << base->output().rows() << "x" << base->output().cols() << std::endl;
@@ -98,15 +106,7 @@ int main(int argc, char* argv[]) {
     Matrix diff = base->output() - comp->output();
     std::cout << "Difference: " << diff.norm() << std::endl;
 
-    // std::cout << sample.col(0).reshaped(28, 28) << "\n\n\n\n";
-
-    // for (int i = 0; i < 6; i++) {
-    //   Matrix data = comp->output().col(0).middleRows(i * 28 * 28, 28 * 28);
-    //   std::cout << data.reshaped(28, 28) << "\n\n";
-    //   data = base->output().col(0).middleRows(i * 28 * 28, 28 * 28);
-    //   std::cout << data.reshaped(28, 28) << "\n\n\n\n";
-    //   break;
-    // }
+    // std::cout << comp->output().reshaped(28, 28) << std::endl;
     
     return 0;
   }
@@ -192,4 +192,3 @@ int main(int argc, char* argv[]) {
   }
   return 0;
 }
-
