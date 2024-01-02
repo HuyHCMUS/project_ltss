@@ -49,7 +49,7 @@ void ConvGPU2::im2col(const Vector& image, Matrix& data_col) {
   }
 }
 
-void ConvGPU2::forward(const Matrix& btm) {
+void ConvGPU2::forward(const Matrix& bottom) {
   int n_sample = bottom.cols();
   top.resize(height_out * width_out * channel_out, n_sample);
   data_cols.resize(n_sample);
