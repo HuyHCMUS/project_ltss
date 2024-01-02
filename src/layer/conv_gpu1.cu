@@ -58,11 +58,37 @@ __global__ void matrix_multiplication_kernel1(float* A, float* B, float* C, int 
     if (row < m && col < k) {
         float sum = 0.0f;
         for (int i = 0; i < n; i++) {
-            sum += A[row * n + i] * B[i * k + col];
+            sum += A[row + i * m] * B[i+ col*n];
         }
-        C[row * k + col] = sum;
+        C[row + col*m] = sum;
     }
 }
+
+__global__ void matrix_multiplication_kernel2(float* A, float* B, float* C, int m, int n, int k)
+{
+	__shared__ float s_A[TILE_WIDTH][TILE_WIDTH];
+	__shared__ float s_B[TILE_WIDTH][TILE_WIDTH];
+	//TODO
+    int Row = blockIdx.y * TILE_WIDTH + threadIdx.y;
+    int Col = blockIdx.x * TILE_WIDTH + threadIdx.x;
+    // Đối với bài này tile_width = blockDim = 32.
+    float sum = 0;
+
+    for (int i = 0; i < (n-1)/TILE_WIDTH+1; i++) {
+        s_A[threadIdx.y][threadIdx.x] = (Row < m && i*TILE_WIDTH+threadIdx.x < n) ? A[Row + i*TILE_WIDTH+threadIdx.x*m] : 0;
+
+        s_B[threadIdx.y][threadIdx.x] = (Col < k && i*TILE_WIDTH+threadIdx.y < n) ? B[(i*TILE_WIDTH+threadIdx.y)+Col*n] : 0;
+        __syncthreads();
+    for (int k = 0; k < TILE_WIDTH; ++k)
+        sum += s_A[threadIdx.y][k] * s_B[k][threadIdx.x];
+    __syncthreads();
+
+    }
+
+    if (Row < m && Col < k)
+        C[Row+Col*m] = sum;
+}
+
 
 void ConvGPU1::forward(const Matrix& bottom) {
   int n_sample = bottom.cols();
@@ -82,15 +108,20 @@ void ConvGPU1::forward(const Matrix& bottom) {
     // Matrix multiplication using gpu.
     Matrix result(height_out * width_out, channel_out);
     float* result_data = result.data();
-    for (int row = 0 ; row < m ; row ++){
-            for (int col = 0 ; col < k ; col++){
-                float sum = 0;
-                for (int l = 0 ; l < n ; l++){
-                    sum += data_col_data[row *n + l] * weight_data[l * k + col];
-                }
-                result_data[row*k + col] = sum;
-            }
-    }
+    float *d_data_col, *d_weight, *d_result;
+    CHECK(cudaMalloc(&d_data_col, m * n * sizeof(float)));
+    CHECK(cudaMalloc(&d_weight, n * k * sizeof(float)));
+    CHECK(cudaMalloc(&d_result,  m * k * sizeof(float)));
+    CHECK(cudaMemcpy(d_data_col, data_col.data(),  m * n* sizeof(float), cudaMemcpyHostToDevice))
+    CHECK(cudaMemcpy(d_weight, weight.data(),  n * k * sizeof(float), cudaMemcpyHostToDevice))
+
+    dim3 blockSize(32, 32);
+    dim3 gridSize((k - 1) / blockSize.x + 1, (m - 1) / blockSize.y + 1); 
+    matrix_multiplication_kernel2<<<gridSize, blockSize>>>(d_data_col, d_weight, d_result, m, n, k);
+    CHECK(cudaMemcpy(result_data, d_result, m * k * sizeof(float), cudaMemcpyDeviceToHost))
+		CHECK(cudaFree(d_data_col));
+		CHECK(cudaFree(d_weight));
+    CHECK(cudaFree(d_result));
     //Matrix result = data_col * weight;
     result.rowwise() += bias.transpose();
     top.col(i) = Eigen::Map<Vector>(result.data(), result.size());
