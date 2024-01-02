@@ -12,7 +12,7 @@
 #include "src/layer/conv.h"
 #include "src/layer/conv_gpu.h"
 #include "src/layer/conv_gpu1.h"
-
+#include "src/layer/conv_gpu2.h"
 
 #include "src/layer/fully_connected.h"
 #include "src/layer/ave_pooling.h"
@@ -61,6 +61,9 @@ int main(int argc, char* argv[]) {
     }
     if (strcmp(device, "gpu_optimize") == 0) {
       return (Layer *)new ConvGPU1(a, b, c, d, e, f, g, h, i);
+    }
+    if (strcmp(device, "gpu_optimize2") == 0) {
+      return (Layer *)new ConvGPU2(a, b, c, d, e, f, g, h, i);
     }
 
     
