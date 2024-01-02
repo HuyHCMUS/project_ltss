@@ -2,6 +2,7 @@
 #include <math.h>
 #include <iostream>
 #define TILE_WIDTH 32
+
 void ConvGPU1::init() {
   height_out = (1 + (height_in - height_kernel + 2 * pad_h) / stride);
   width_out =   (1 + (width_in - width_kernel + 2 * pad_w) / stride);
@@ -49,6 +50,7 @@ void ConvGPU1::im2col(const Vector& image, Matrix& data_col) {
   }
 }
 
+
 __global__ void matrix_multiplication_kernel1(float* A, float* B, float* C, int m, int n, int k)
 {
 	//TODO
@@ -89,16 +91,36 @@ __global__ void matrix_multiplication_kernel2(float* A, float* B, float* C, int 
         C[Row+Col*m] = sum;
 }
 
+void matrix_multiplication(float* A, float*B, float*C, int m, int n, int k, const cudaStream_t &stream,int kernel_type = 2){
+  float *d_A, *d_B, *d_C;
+  CHECK(cudaMalloc(&d_A, m * n * sizeof(float)));
+  CHECK(cudaMalloc(&d_B, n * k * sizeof(float)));
+  CHECK(cudaMalloc(&d_C,  m * k * sizeof(float)));
+  CHECK(cudaMemcpyAsync(d_A, A,  m * n* sizeof(float), cudaMemcpyHostToDevice, stream));
+  CHECK(cudaMemcpyAsync(d_B, B,  n * k * sizeof(float), cudaMemcpyHostToDevice, stream));
+
+  dim3 blockSize(32, 32);
+  dim3 gridSize((k - 1) / blockSize.x + 1, (m - 1) / blockSize.y + 1); 
+  matrix_multiplication_kernel2<<<gridSize, blockSize, 0, stream>>>(d_A, d_B, d_C, m, n, k);
+  CHECK(cudaMemcpyAsync(C, d_C, m * k * sizeof(float), cudaMemcpyDeviceToHost, stream));
+  
+  CHECK(cudaFree(d_A));
+  CHECK(cudaFree(d_B));
+  CHECK(cudaFree(d_C));
+}
 
 void ConvGPU1::forward(const Matrix& bottom) {
   int n_sample = bottom.cols();
   top.resize(height_out * width_out * channel_out, n_sample);
   data_cols.resize(n_sample);
+  std::vector<cudaStream_t> streams(n_sample);
   for (int i = 0; i < n_sample; i ++) {
     // im2col
     Matrix data_col;
     im2col(bottom.col(i), data_col);
     data_cols[i] = data_col;
+    cudaStreamCreate(&streams[i]);
+    
     // conv by product
     int m = data_col.rows();
     int n = data_col.cols();
@@ -108,23 +130,19 @@ void ConvGPU1::forward(const Matrix& bottom) {
     // Matrix multiplication using gpu.
     Matrix result(height_out * width_out, channel_out);
     float* result_data = result.data();
-    float *d_data_col, *d_weight, *d_result;
-    CHECK(cudaMalloc(&d_data_col, m * n * sizeof(float)));
-    CHECK(cudaMalloc(&d_weight, n * k * sizeof(float)));
-    CHECK(cudaMalloc(&d_result,  m * k * sizeof(float)));
-    CHECK(cudaMemcpy(d_data_col, data_col.data(),  m * n* sizeof(float), cudaMemcpyHostToDevice))
-    CHECK(cudaMemcpy(d_weight, weight.data(),  n * k * sizeof(float), cudaMemcpyHostToDevice))
+    matrix_multiplication(data_col_data, weight_data, result_data, m, n, k, streams[i]);
 
-    dim3 blockSize(32, 32);
-    dim3 gridSize((k - 1) / blockSize.x + 1, (m - 1) / blockSize.y + 1); 
-    matrix_multiplication_kernel2<<<gridSize, blockSize>>>(d_data_col, d_weight, d_result, m, n, k);
-    CHECK(cudaMemcpy(result_data, d_result, m * k * sizeof(float), cudaMemcpyDeviceToHost))
-		CHECK(cudaFree(d_data_col));
-		CHECK(cudaFree(d_weight));
-    CHECK(cudaFree(d_result));
     //Matrix result = data_col * weight;
     result.rowwise() += bias.transpose();
     top.col(i) = Eigen::Map<Vector>(result.data(), result.size());
+  }
+  for (int i = 0; i < n_sample; i ++) {
+    CHECK(cudaStreamSynchronize(streams[i]));
+  }
+
+  for (int i = 0; i < n_sample; i ++) {
+    CHECK(cudaStreamDestroy(streams[i]));
+    CHECK(cudaGetLastError());
   }
 }
 
