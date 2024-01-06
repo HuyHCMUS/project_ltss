@@ -37,6 +37,22 @@ void printTiming(std::vector<float> &timings) {
   }
 }
 
+Layer* make_conv_layer(char* device, int channel_in, int height_in, int width_in, int channel_out, int height_kernel, int width_kernel, int stride = 1, int pad_w = 0, int pad_h = 0) {
+  if (strcmp(device, "cpu") == 0) {
+    return (Layer *)new Conv(a, b, c, d, e, f, g, h, i);
+  }
+  if (strcmp(device, "gpu") == 0) {
+    return (Layer *)new ConvGPU(a, b, c, d, e, f, g, h, i);
+  }
+  if (strcmp(device, "gpu_optimize") == 0) {
+    return (Layer *)new ConvGPU1(a, b, c, d, e, f, g, h, i);
+  }
+  if (strcmp(device, "gpu_optimize2") == 0) {
+    return (Layer *)new ConvGPU2(a, b, c, d, e, f, g, h, i);
+  }
+  
+  throw std::invalid_argument("unknown device: " + std::string(device));
+}
 
 int main(int argc, char* argv[]) {
   // ./demo [run|test] [gpu|cpu]
@@ -51,26 +67,6 @@ int main(int argc, char* argv[]) {
 
   char* device = argv[2];
   std::cout << "Using device: " << device << std::endl;
-
-  auto make_conv_layer = [device](int a, int b, int c, int d, int e, int f, int g = 1, int h = 0, int i = 0) {
-    if (strcmp(device, "cpu") == 0) {
-      return (Layer *)new Conv(a, b, c, d, e, f, g, h, i);
-    }
-    if (strcmp(device, "gpu") == 0) {
-      return (Layer *)new ConvGPU(a, b, c, d, e, f, g, h, i);
-    }
-    if (strcmp(device, "gpu_optimize") == 0) {
-      return (Layer *)new ConvGPU1(a, b, c, d, e, f, g, h, i);
-    }
-    if (strcmp(device, "gpu_optimize2") == 0) {
-      return (Layer *)new ConvGPU2(a, b, c, d, e, f, g, h, i);
-    }
-
-    
-    
-    
-    throw std::invalid_argument("unknown device: " + std::string(device));
-  };
 
   // data
   MNIST dataset("../data/mnist/");
@@ -90,7 +86,7 @@ int main(int argc, char* argv[]) {
 
     Layer *base = new Conv(1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
     base->set_parameters(params);
-    Layer *comp = make_conv_layer(1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
+    Layer *comp = make_conv_layer(device, 1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
     comp->set_parameters(params);
 
     // Get one sample to test
@@ -130,10 +126,10 @@ int main(int argc, char* argv[]) {
   // channel_in, height_in, width_in, height_pool, width_pool, stride = 1
 
 
-  dnn.add_layer(make_conv_layer(1, 28, 28, 6, 5, 5, 1, 2, 2));
+  dnn.add_layer(make_conv_layer(device, 1, 28, 28, 6, 5, 5, 1, 2, 2));
   dnn.add_layer(new ReLU);
   dnn.add_layer(new MaxPooling(6, 28, 28, 2, 2, 2));
-  dnn.add_layer(make_conv_layer(6, 14, 14, 16, 5, 5));
+  dnn.add_layer(make_conv_layer(device, 6, 14, 14, 16, 5, 5));
   dnn.add_layer(new ReLU);
   Layer* pool = new MaxPooling(16, 10, 10, 2, 2, 2);
   dnn.add_layer(pool);
