@@ -49,43 +49,14 @@ void ConvGPU2::im2col(const Vector& image, Matrix& data_col) {
   }
 }
 
-__global__ void im2col_kernel(const float* image, float* data_col, int height_in, int width_in, 
-                            int channel_in, int height_out, int width_out, 
-                            int height_kernel, int width_kernel, int stride, int pad_h, int pad_w) 
-{
-  int global_idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-  int hw_kernel = height_kernel * width_kernel;
-  int hw_out = height_out * width_out;
-
-  int step_h = global_idx / width_out;
-  int step_w = global_idx % width_out;
-  int start_idx = step_h * width_in * stride + step_w * stride;
-
-  for (int c = 0; c < channel_in; c ++) {
-    for (int j = 0; j < hw_kernel; j ++) {
-      int cur_col = start_idx % width_in + j % width_kernel - pad_w; 
-      int cur_row = start_idx / width_in + j / width_kernel - pad_h;
-
-      if (cur_col < 0 || cur_col >= width_in || cur_row < 0 || cur_row >= height_in) {
-        //data_col[global_idx * channel_in * hw_kernel +  c * hw_kernel + j] = 0;
-        data_col[(c * hw_kernel + j) * hw_out + global_idx] = 0;
-      }
-      else {
-        int pick_idx = cur_row * width_in + cur_col;
-        data_col[(c * hw_kernel + j) * hw_out + global_idx] = image[pick_idx + c * height_in * width_in];
-      }
-    }
-  }
-}
-
-
 void ConvGPU2::forward(const Matrix& bottom) {
   int n_sample = bottom.cols();
   top.resize(height_out * width_out * channel_out, n_sample);
   data_cols.resize(n_sample);
+  std::vector<cudaStream_t> streams(n_sample);
   for (int i = 0; i < n_sample; i ++) {
     // im2col
+    cudaStreamCreate(&streams[i]);
     Matrix data_col;
     data_col.resize(height_out * width_out, height_kernel * width_kernel * channel_in);
 
@@ -100,18 +71,36 @@ void ConvGPU2::forward(const Matrix& bottom) {
     dim3 blockSize(32);
     dim3 gridSize((height_out * width_out - 1) / blockSize.x + 1); 
 
-    im2col_kernel<<<gridSize, blockSize>>>(d_image, d_data_col, height_in, width_in, channel_in, height_out, width_out, height_kernel, width_kernel, stride, pad_h, pad_w);
+    im2col_kernel<<<gridSize, blockSize, 0, streams[i]>>>(d_image, d_data_col, height_in, width_in, channel_in, height_out, width_out, height_kernel, width_kernel, stride, pad_h, pad_w);
     
     cudaMemcpy(data_col.data(), d_data_col, data_col.size() * sizeof(float), cudaMemcpyDeviceToHost);
+
+    int m = data_col.rows();
+    int n = data_col.cols();
+    int k = weight.cols();
+    float * data_col_data = data_col.data();
+    float * weight_data = weight.data();
+    // Matrix multiplication using gpu.
+    Matrix result(height_out * width_out, channel_out);
+    float* result_data = result.data();
+    matrix_multiplication(data_col_data, weight_data, result_data, m, n, k, streams[i], 1);
 
     CHECK(cudaFree(d_image));
     CHECK(cudaFree(d_data_col));
     //im2col(bottom.col(i), data_col);
     data_cols[i] = data_col;
     // conv by product
-    Matrix result = data_col * weight;  // result: (hw_out, channel_out)
+    //Matrix result = data_col * weight;
     result.rowwise() += bias.transpose();
     top.col(i) = Eigen::Map<Vector>(result.data(), result.size());
+  }
+  for (int i = 0; i < n_sample; i ++) {
+    CHECK(cudaStreamSynchronize(streams[i]));
+  }
+
+  for (int i = 0; i < n_sample; i ++) {
+    CHECK(cudaStreamDestroy(streams[i]));
+    CHECK(cudaGetLastError());
   }
 }
 

@@ -3,6 +3,8 @@
 
 #include <Eigen/Core>
 #include <cuda_runtime_api.h>
+#define TILE_WIDTH 32
+
 
 #define CHECK(call)\
 {\
@@ -54,5 +56,15 @@ struct GpuTimer
 		return elapsed;
 	}
 };
+
+__global__ void matrix_multiplication_kernel1(float* A, float* B, float* C, int m, int n, int k);
+__global__ void matrix_multiplication_kernel2(float* A, float* B, float* C, int m, int n, int k);
+//void matrix_multiplication(float* A, float*B, float*C, int m, int n, int k, 
+//                            const cudaStream_t &stream);
+__global__ void im2col_kernel(const float* image, float* data_col, int height_in, int width_in, 
+                            int channel_in, int height_out, int width_out, 
+                            int height_kernel, int width_kernel, int stride, int pad_h, int pad_w); 
+void matrix_multiplication(float* A, float*B, float*C, int m, int n, int k, const cudaStream_t &stream,int kernel_type);
+
 
 #endif
