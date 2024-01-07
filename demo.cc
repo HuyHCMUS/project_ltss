@@ -13,6 +13,7 @@
 #include "src/layer/conv_gpu.h"
 #include "src/layer/conv_gpu1.h"
 #include "src/layer/conv_gpu2.h"
+#include "src/layer/conv_gpu3.h"
 
 #include "src/layer/fully_connected.h"
 #include "src/layer/ave_pooling.h"
@@ -49,6 +50,9 @@ Layer* make_conv_layer(char* device, int channel_in, int height_in, int width_in
   }
   if (strcmp(device, "gpu_optimize2") == 0) {
     return (Layer *)new ConvGPU2(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
+  }
+  if (strcmp(device, "gpu_optimize3") == 0) {
+    return (Layer *)new ConvGPU3(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
   }
   
   throw std::invalid_argument("unknown device: " + std::string(device));

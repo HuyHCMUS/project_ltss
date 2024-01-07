@@ -81,10 +81,11 @@ void matrix_multiplication(float* A, float*B, float*C, int m, int n, int k, cons
   CHECK(cudaMemcpyAsync(d_B, B,  n * k * sizeof(float), cudaMemcpyHostToDevice, stream));
 
   dim3 blockSize(32, 32);
+  
   dim3 gridSize((k - 1) / blockSize.x + 1, (m - 1) / blockSize.y + 1);
   if (kernel_type == 1) 
     matrix_multiplication_kernel1<<<gridSize, blockSize, 0, stream>>>(d_A, d_B, d_C, m, n, k);
-  else   if (kernel_type == 1) 
+  else   if (kernel_type == 2) 
     matrix_multiplication_kernel2<<<gridSize, blockSize, 0, stream>>>(d_A, d_B, d_C, m, n, k);
   CHECK(cudaMemcpyAsync(C, d_C, m * k * sizeof(float), cudaMemcpyDeviceToHost, stream));
   
