@@ -39,16 +39,16 @@ void printTiming(std::vector<float> &timings) {
 
 Layer* make_conv_layer(char* device, int channel_in, int height_in, int width_in, int channel_out, int height_kernel, int width_kernel, int stride = 1, int pad_w = 0, int pad_h = 0) {
   if (strcmp(device, "cpu") == 0) {
-    return (Layer *)new Conv(a, b, c, d, e, f, g, h, i);
+    return (Layer *)new Conv(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
   }
   if (strcmp(device, "gpu") == 0) {
-    return (Layer *)new ConvGPU(a, b, c, d, e, f, g, h, i);
+    return (Layer *)new ConvGPU(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
   }
   if (strcmp(device, "gpu_optimize") == 0) {
-    return (Layer *)new ConvGPU1(a, b, c, d, e, f, g, h, i);
+    return (Layer *)new ConvGPU1(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
   }
   if (strcmp(device, "gpu_optimize2") == 0) {
-    return (Layer *)new ConvGPU2(a, b, c, d, e, f, g, h, i);
+    return (Layer *)new ConvGPU2(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
   }
   
   throw std::invalid_argument("unknown device: " + std::string(device));
