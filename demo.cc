@@ -38,6 +38,8 @@ void printTiming(std::vector<float> &timings) {
   }
 }
 
+
+
 Layer* make_conv_layer(char* device, int channel_in, int height_in, int width_in, int channel_out, int height_kernel, int width_kernel, int stride = 1, int pad_w = 0, int pad_h = 0) {
   if (strcmp(device, "cpu") == 0) {
     return (Layer *)new Conv(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
@@ -58,19 +60,55 @@ Layer* make_conv_layer(char* device, int channel_in, int height_in, int width_in
   throw std::invalid_argument("unknown device: " + std::string(device));
 }
 
+void conv_time(int num_sample, char * device, const MNIST & dataset){
+  Layer *conv1 = make_conv_layer(device, 1, 28, 28, 6, 5, 5, 1, 2, 2);
+  Layer *relu = new ReLU();
+  Layer *maxpool =  new MaxPooling(6, 28, 28, 2, 2, 2);
+  Layer *conv3 = make_conv_layer(device, 6, 14, 14, 16, 5, 5);
+  float totaltime_conv1= 0, totaltime_conv3 = 0;
+  for (int i = 0 ; i < 100 ; i++){
+    Matrix sample = dataset.train_data.col(i);
+    GpuTimer timer_conv1, timer_conv3;
+    timer_conv1.Start();
+    conv1->forward(sample);
+    timer_conv1.Stop();
+    relu -> forward(conv1 ->output());
+    maxpool ->forward(relu -> output());
+    timer_conv3.Start();
+    conv3 ->forward(maxpool -> output());
+    timer_conv3.Stop();
+    float time_c1 = timer_conv1.Elapsed();
+    float time_c3 = timer_conv3.Elapsed();
+    totaltime_conv1 += time_c1;
+    totaltime_conv3 += time_c3;
+  }
+
+  
+  std:: cout << "Time processing C1 (100 samples): " << totaltime_conv1 << " ms\n";
+  std:: cout << "Time processing C3 (100 samples): " << totaltime_conv3 << " ms\n";
+
+}
+
 int main(int argc, char* argv[]) {
   // ./demo [run|test] [gpu|cpu]
 
-  if (argc != 3) {
-    std::cout << "Usage: ./demo [run|test] [gpu|cpu]" << std::endl;
+  if (argc != 4 && argc !=3) {
+    std::cout << "Usage: ./demo [run|test] [gpu|cpu|gpu_optmize] " << std::endl;
     return 1;
   }
 
   char* mode = argv[1];
   std::cout << "Running mode: " << mode << std::endl;
 
-  char* device = argv[2];
-  std::cout << "Using device: " << device << std::endl;
+  char* device_1 = argv[2];
+  std::cout << "Device 1: " << device_1 << std::endl;
+  char* device_2;
+  char host[] = "cpu";
+  if (argc == 4){
+    device_2= argv[3];
+  }
+  else device_2 = host;
+  std::cout << "Device 2: " << device_2 << std::endl;
 
   // data
   //MNIST dataset("../data/mnist/");
@@ -88,27 +126,32 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < paramsSize; i ++) {
       params[i] = i;
     }
-
-    Layer *base = new Conv(1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
-    base->set_parameters(params);
-    Layer *comp = make_conv_layer(device, 1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
-    comp->set_parameters(params);
+    Layer *conv_device1 = make_conv_layer(device_1, 1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
+    conv_device1->set_parameters(params);
+    Layer *conv_device2 = make_conv_layer(device_2, 1, 28, 28, channel_out, height_kernel, width_kernel, 1, 2, 2);
+    conv_device2->set_parameters(params);
 
     // Get one sample to test
     Matrix sample = dataset.train_data.col(0);
     std::cout << "Input: " << sample.rows() << "x" << sample.cols() << std::endl;
+    int n_sample = 100;        // Đo thời gian chạy trên 100 sample:
 
-    std::cout << "Running with base layer..." << std::endl;
-    base->forward(sample);
+    std::cout << "Running with " << device_1 <<"..." << std::endl;
+    conv_device1->forward(sample);
+    conv_time(100, device_1, dataset);
 
-    std::cout << "Running with selected layer..." << std::endl;
-    comp->forward(sample);
+    std::cout << "Running with " << device_2 <<"..." << std::endl;
+    conv_device2->forward(sample);
+    conv_time(100, device_2, dataset);
 
-    std::cout << "Base output: " << base->output().rows() << "x" << base->output().cols() << std::endl;
-    std::cout << "Selected output: " << comp->output().rows() << "x" << comp->output().cols() << std::endl;
+    std::cout << "Device 1 output: " << conv_device1->output().rows() << "x" << conv_device1->output().cols() << std::endl;
+    std::cout << "Device 2 output: " << conv_device2->output().rows() << "x" << conv_device2->output().cols() << std::endl;
 
-    Matrix diff = base->output() - comp->output();
+    Matrix diff = conv_device1->output() - conv_device2->output();
     std::cout << "Difference: " << diff.norm() << std::endl;
+
+
+    
 
     // std::cout << comp->output().reshaped(28, 28) << std::endl;
     
@@ -131,10 +174,10 @@ int main(int argc, char* argv[]) {
   // channel_in, height_in, width_in, height_pool, width_pool, stride = 1
 
 
-  dnn.add_layer(make_conv_layer(device, 1, 28, 28, 6, 5, 5, 1, 2, 2));
+  dnn.add_layer(make_conv_layer(device_1, 1, 28, 28, 6, 5, 5, 1, 2, 2));
   dnn.add_layer(new ReLU);
   dnn.add_layer(new MaxPooling(6, 28, 28, 2, 2, 2));
-  dnn.add_layer(make_conv_layer(device, 6, 14, 14, 16, 5, 5));
+  dnn.add_layer(make_conv_layer(device_1, 6, 14, 14, 16, 5, 5));
   dnn.add_layer(new ReLU);
   Layer* pool = new MaxPooling(16, 10, 10, 2, 2, 2);
   dnn.add_layer(pool);
