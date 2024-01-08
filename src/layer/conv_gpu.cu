@@ -151,11 +151,9 @@ __global__ void kernelConvolution(
       int c_kernel = c_off + w_kernel / 2;
       float weight_val = weight[r_kernel * w_kernel + c_kernel];
 
-      int w_diff = w_in + pad_w * 2 - w_out;
-      int h_diff = h_in + pad_h * 2 - h_out;
+      int r_in = r_out + r_off + w_in - w_out;
+      int c_in = c_out + c_off + h_in - h_out;
 
-      int r_in = r_out + h_diff / 2 - h_kernel / 2 + r_off;
-      int c_in = c_out + w_diff / 2 - w_kernel / 2 + c_off;
       float inp_val = (
         0 <= r_in && r_in < h_in &&
         0 <= c_in && c_in < w_in
