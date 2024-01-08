@@ -7,6 +7,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <iostream>
+#include <iomanip>
 
 #include "src/layer.h"
 #include "src/layer/conv.h"
@@ -33,11 +34,10 @@ void printTiming(std::vector<float> &timings) {
   for (int i = 0; i < timings.size(); i ++) {
     std::cout
       << "L" << i
-      << " (" << timings[i] << "s)"
+      << " (" << std::fixed << std::setprecision(3) << timings[i] << "s)"
       << (i < timings.size() - 1 ? " -> " : "\n");
   }
 }
-
 
 
 Layer* make_conv_layer(char* device, int channel_in, int height_in, int width_in, int channel_out, int height_kernel, int width_kernel, int stride = 1, int pad_w = 0, int pad_h = 0) {
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
   // ./demo [run|test] [gpu|cpu]
 
   if (argc != 4 && argc !=3) {
-    std::cout << "Usage: ./demo [run|test] [gpu|cpu|gpu_optmize] " << std::endl;
+    std::cout << "Usage: ./demo [run|test] [gpu|cpu|gpu_optimize] " << std::endl;
     return 1;
   }
 
@@ -197,6 +197,7 @@ int main(int argc, char* argv[]) {
   const int n_epoch = 1;
   // const int batch_size = 128;
   const int batch_size = 32;
+  std::vector<float> total_timings(dnn.num_layers(), 0);
 
   for (int epoch = 0; epoch < n_epoch; epoch ++) {
     shuffle_data(dataset.train_data, dataset.train_labels);
@@ -218,6 +219,7 @@ int main(int argc, char* argv[]) {
 
       for (int i = 0; i < dnn.num_layers(); i ++) {
         forward_timings[i] += timings[i];
+        total_timings[i] += timings[i];
       }
 
       dnn.backward(x_batch, target_batch);
@@ -237,5 +239,14 @@ int main(int argc, char* argv[]) {
     std::cout << epoch + 1 << "-th epoch, test acc: " << acc << std::endl;
     std::cout << std::endl;
   }
+
+  std::cout << "\nTotal timings: " << std::endl;
+  printTiming(total_timings);
+  float total = 0;
+  for (int i = 0; i < total_timings.size(); i ++) {
+    total += total_timings[i];
+  }
+  std::cout << "Total: " << total << std::endl;
+
   return 0;
 }
