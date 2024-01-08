@@ -7,6 +7,7 @@
 
 Cách chạy: Xem demo [Run-Lenet5](https://colab.research.google.com/drive/1B3C4PLaVH6pxKBII19HIXLLOWmGbQFMr?usp=sharing)
 
+Biên dịch:
 ```
 mkdir build
 cd build
