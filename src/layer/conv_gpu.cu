@@ -104,9 +104,9 @@ void ConvGPU::forward(const Matrix& btm) {
         dim3 gridSize(ceilDiv(width_out, blockSize.x), ceilDiv(height_out, blockSize.y));
 
         kernelConvolution<<<gridSize, blockSize>>>(
-          d_bottom + i * bottom.cols() + c_in * hw_in, width_in, height_in,
-          d_weight + c_out * hw_kernel, width_kernel, height_kernel,
-          d_top + i * bottom.cols() + c_out * hw_out, width_out, height_out,
+          &d_bottom[i * bottom.cols() + c_in * hw_in], width_in, height_in,
+          &d_weight[c_out * hw_kernel], width_kernel, height_kernel,
+          &d_top[i * bottom.cols() + c_out * hw_out], width_out, height_out,
           pad_w, pad_h
         );
         CHECK(cudaGetLastError());
@@ -120,11 +120,11 @@ void ConvGPU::forward(const Matrix& btm) {
   CHECK(cudaFree(d_bottom));
   CHECK(cudaFree(d_weight));
 
-  for (int i = 0; i < n_sample; i ++) {
-    for (int c = 0; c < channel_out; c ++) {
-      top.row(i).middleCols(hw_out * c, hw_out).array() += bias(c, 0);
-    }
+  for (int c = 0; c < channel_out; c ++) {
+    top.middleCols(hw_out * c, hw_out).array() += bias(c, 0);
   }
+  // for (int i = 0; i < n_sample; i ++) {
+  // }
 
   bottom.transposeInPlace();
   top.transposeInPlace();
@@ -147,18 +147,21 @@ __global__ void kernelConvolution(
 
   for (int r_off = - h_kernel / 2; r_off <= h_kernel / 2; r_off++) {
     for (int c_off = - w_kernel / 2; c_off <= w_kernel / 2; c_off++) {
-      int r_in = r_out + h_kernel / 2 - pad_h + r_off;
-      int c_in = c_out + w_kernel / 2 - pad_w + c_off;
-      float inp_val = (
-        r_in >= pad_h && r_in < h_in + pad_h &&
-        c_in >= pad_w && c_in < w_in + pad_w
-        ? inp[r_in * w_in + c_in]
-        : 0
-      );
-
       int r_kernel = r_off + h_kernel / 2;
       int c_kernel = c_off + w_kernel / 2;
       float weight_val = weight[r_kernel * w_kernel + c_kernel];
+
+      int w_diff = w_in + pad_w * 2 - w_out;
+      int h_diff = h_in + pad_h * 2 - h_out;
+
+      int r_in = r_out + h_diff / 2 - h_kernel / 2 + r_off;
+      int c_in = c_out + w_diff / 2 - w_kernel / 2 + c_off;
+      float inp_val = (
+        0 <= r_in && r_in < h_in &&
+        0 <= c_in && c_in < w_in
+        ? inp[r_in * w_in + c_in]
+        : 0
+      );
 
       sum += inp_val * weight_val;
     }

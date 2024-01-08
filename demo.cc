@@ -150,10 +150,14 @@ int main(int argc, char* argv[]) {
     Matrix diff = conv_device1->output() - conv_device2->output();
     std::cout << "Difference: " << diff.norm() << std::endl;
 
-
-    
-
-    // std::cout << comp->output().reshaped(28, 28) << std::endl;
+    // std::cout << "\n\n\n\n\n";
+    // std::cout << dataset.train_data.col(0).reshaped(28, 28) << std::endl;
+    // std::cout << "\n\n\n\n\n";
+    // std::cout << conv_device1->output().topRows(28 * 28).reshaped(28, 28) << std::endl;
+    // std::cout << "\n\n\n\n\n";
+    // std::cout << conv_device2->output().topRows(28 * 28).reshaped(28, 28) << std::endl;
+    // std::cout << "\n\n\n\n\n";
+    // std::cout << diff.topRows(28 * 28).reshaped(28, 28) << std::endl;
     
     return 0;
   }
@@ -228,6 +232,7 @@ int main(int argc, char* argv[]) {
         std::cout << ith_batch << "-th batch, loss: " << dnn.get_loss() << std::endl;
         printTiming(forward_timings);
         forward_timings = std::vector<float>(dnn.num_layers(), 0);
+        break;
       }
       // optimize
       dnn.update(opt);
@@ -238,6 +243,7 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
     std::cout << epoch + 1 << "-th epoch, test acc: " << acc << std::endl;
     std::cout << std::endl;
+      break;
   }
 
   std::cout << "\nTotal timings: " << std::endl;
