@@ -232,7 +232,6 @@ int main(int argc, char* argv[]) {
         std::cout << ith_batch << "-th batch, loss: " << dnn.get_loss() << std::endl;
         printTiming(forward_timings);
         forward_timings = std::vector<float>(dnn.num_layers(), 0);
-        break;
       }
       // optimize
       dnn.update(opt);
@@ -243,7 +242,6 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
     std::cout << epoch + 1 << "-th epoch, test acc: " << acc << std::endl;
     std::cout << std::endl;
-      break;
   }
 
   std::cout << "\nTotal timings: " << std::endl;
