@@ -5,6 +5,8 @@
 - 20120089 - Lê Xuân Hoàng
 - 20120422 - Nguyễn Thị Ánh Tuyết
 
+**Link video YouTube:** https://www.youtube.com/watch?v=mNN0OswVke8
+
 Cách chạy: Xem demo [Run-Lenet5](https://colab.research.google.com/drive/1B3C4PLaVH6pxKBII19HIXLLOWmGbQFMr?usp=sharing)
 
 Biên dịch:
