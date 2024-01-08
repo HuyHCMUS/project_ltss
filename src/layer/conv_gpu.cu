@@ -49,6 +49,87 @@ void ConvGPU::im2col(const Vector& image, Matrix& data_col) {
   }
 }
 
+void ConvGPU::forward(const Matrix& btm) {
+  Matrix bottom = btm;
+
+  int n_sample = bottom.cols();
+  top.resize(height_out * width_out * channel_out, n_sample);
+  data_cols.resize(n_sample);
+
+  int hw_in = height_in * width_in;
+  int hw_out = height_out * width_out;
+  int hw_kernel = height_kernel * width_kernel;
+
+  top.setZero();
+  top.transposeInPlace();
+  bottom.transposeInPlace();
+
+  // std::cout << "bottom: " << bottom.rows() << " " << bottom.cols() << std::endl
+  //           << "weight: " << weight.rows() << " " << weight.cols() << std::endl
+  //           << "bias: " << bias.rows() << " " << bias.cols() << std::endl
+  //           << "top: " << top.rows() << " " << top.cols() << std::endl;
+
+  float *d_bottom, *d_weight, *d_top;
+
+  CHECK(cudaMalloc(&d_bottom, bottom.rows() * bottom.cols() * sizeof(float)));
+  CHECK(cudaMalloc(&d_weight, weight.rows() * weight.cols() * sizeof(float)));
+  CHECK(cudaMalloc(&d_top, top.rows() * top.cols() * sizeof(float)));
+
+  CHECK(cudaMemcpy(d_bottom, bottom.data(), bottom.rows() * bottom.cols() * sizeof(float), cudaMemcpyHostToDevice));
+  CHECK(cudaMemcpy(d_weight, weight.data(), weight.rows() * weight.cols() * sizeof(float), cudaMemcpyHostToDevice));
+  CHECK(cudaMemcpy(d_top, top.data(), top.rows() * top.cols() * sizeof(float), cudaMemcpyHostToDevice));
+
+  for (int i = 0; i < n_sample; i ++) {
+    // im2col
+    Matrix data_col;
+    im2col(bottom.row(i), data_col);
+    data_cols[i] = data_col;
+
+    // bottom:  (1x28x28, N)    (6x14x14, N)
+    // weight:  (5x5, 6)        (6x5x5, 16)
+    // bias:    (6, 1)          (16, 1)
+    // top:     (6x28x28, N)    (16x10x10, N)
+
+    // now
+    // bottom:  (N, 1x28x28)    (N, 6x14x14)
+    // weight:  (5x5, 6)        (6x5x5, 16)
+    // bias:    (6, 1)          (16, 1)
+    // top:     (N, 6x28x28)    (N, 16x10x10)
+
+    // top = bottom * weight + bias
+
+    for (int c_in = 0; c_in < channel_in; c_in++) {
+      for (int c_out = 0; c_out < channel_out; c_out++) {
+        dim3 blockSize(32, 32);
+        dim3 gridSize(ceilDiv(width_out, blockSize.x), ceilDiv(height_out, blockSize.y));
+
+        kernelConvolution<<<gridSize, blockSize>>>(
+          d_bottom + i * bottom.cols() + c_in * hw_in, width_in, height_in,
+          d_weight + c_out * hw_kernel, width_kernel, height_kernel,
+          d_top + i * bottom.cols() + c_out * hw_out, width_out, height_out,
+          pad_w, pad_h
+        );
+        CHECK(cudaGetLastError());
+        CHECK(cudaDeviceSynchronize());
+      }
+    }
+  }
+
+  CHECK(cudaMemcpy(top.data(), d_top, top.rows() * top.cols() * sizeof(float), cudaMemcpyDeviceToHost));
+  CHECK(cudaFree(d_top));
+  CHECK(cudaFree(d_bottom));
+  CHECK(cudaFree(d_weight));
+
+  for (int i = 0; i < n_sample; i ++) {
+    for (int c = 0; c < channel_out; c ++) {
+      top.row(i).middleCols(hw_out * c, hw_out).array() += bias(c, 0);
+    }
+  }
+
+  bottom.transposeInPlace();
+  top.transposeInPlace();
+}
+
 __global__ void kernelConvolution(
   float* inp, int h_in, int w_in,
   float* weight, int h_kernel, int w_kernel,
@@ -84,129 +165,6 @@ __global__ void kernelConvolution(
   }
 
   atomicAdd(&out[r_out * w_out + c_out], sum);
-}
-
-void ConvGPU::forward(const Matrix& btm) {
-  Matrix bottom = btm;
-
-  int n_sample = bottom.cols();
-  top.resize(height_out * width_out * channel_out, n_sample);
-  data_cols.resize(n_sample);
-
-  int hw_in = height_in * width_in;
-  int hw_out = height_out * width_out;
-  int hw_kernel = height_kernel * width_kernel;
-
-  top.setZero();
-  top.transposeInPlace();
-  bottom.transposeInPlace();
-  std::vector<cudaStream_t> streams(n_sample);
-
-  // std::cout << "bottom: " << bottom.rows() << " " << bottom.cols() << std::endl
-  //           << "weight: " << weight.rows() << " " << weight.cols() << std::endl
-  //           << "bias: " << bias.rows() << " " << bias.cols() << std::endl
-  //           << "top: " << top.rows() << " " << top.cols() << std::endl;
-
-  float *d_bottom, *d_weight, *d_top;
-
-  CHECK(cudaMalloc(&d_bottom, bottom.rows() * bottom.cols() * sizeof(float)));
-  CHECK(cudaMalloc(&d_weight, weight.rows() * weight.cols() * sizeof(float)));
-  CHECK(cudaMalloc(&d_top, top.rows() * top.cols() * sizeof(float)));
-
-  CHECK(cudaMemcpy(d_bottom, bottom.data(), bottom.rows() * bottom.cols() * sizeof(float), cudaMemcpyHostToDevice));
-  CHECK(cudaMemcpy(d_weight, weight.data(), weight.rows() * weight.cols() * sizeof(float), cudaMemcpyHostToDevice));
-  CHECK(cudaMemcpy(d_top, top.data(), top.rows() * top.cols() * sizeof(float), cudaMemcpyHostToDevice));
-
-  for (int i = 0; i < n_sample; i ++) {
-    // im2col
-    Matrix data_col;
-    im2col(bottom.row(i), data_col);
-    data_cols[i] = data_col;
-
-    // bottom:  (1x28x28, N)    (6x14x14, N)
-    // weight:  (5x5, 6)        (6x5x5, 16)
-    // bias:    (6, 1)          (16, 1)
-    // top:     (6x28x28, N)    (16x10x10, N)
-
-    // now
-    // bottom:  (N, 1x28x28)    (N, 6x14x14)
-    // weight:  (6, 5x5)        (16, 6x5x5)
-    // bias:    (6, 1)          (16, 1)
-    // top:     (N, 6x28x28)    (N, 16x10x10)
-
-    // top = bottom * weight + bias
-
-    cudaStreamCreate(&streams[i]);
-
-    for (int c_in = 0; c_in < channel_in; c_in++) {
-      for (int c_out = 0; c_out < channel_out; c_out++) {
-        dim3 blockSize(32, 32);
-        dim3 gridSize(ceilDiv(width_out, blockSize.x), ceilDiv(height_out, blockSize.y));
-
-        kernelConvolution<<<gridSize, blockSize, 0, streams[i]>>>(
-          d_bottom + i * bottom.cols() + c_in * hw_in, width_in, height_in,
-          d_weight + c_out * hw_kernel, width_kernel, height_kernel,
-          d_top + i * bottom.cols() + c_out * hw_out, width_out, height_out,
-          pad_w, pad_h
-        );
-
-        // // Input (as a copy)
-        // Matrix bottom_mat = bottom.col(i).middleRows(c_in * hw_in, hw_in);
-        // // Pad around with 0
-        // padMatrix(bottom_mat, pad_w, pad_h);
-        // // Kernel (as a copy)
-        // Matrix kernel = weight.col(c_out).middleRows(c_in * hw_kernel, hw_kernel);
-        // // Output (as reference)
-        // auto top_mat = top.col(i).middleRows(c_out * hw_out, hw_out);
-        // top_mat.setZero();
-        // Matrix new_top_mat = top_mat;
-
-        // float *d_a, *d_b, *d_k;
-        // CHECK(cudaMalloc(&d_a, bottom_mat.rows() * bottom_mat.cols() * sizeof(float)));
-        // CHECK(cudaMalloc(&d_b, top_mat.rows() * top_mat.cols() * sizeof(float)));
-        // CHECK(cudaMalloc(&d_k, kernel.rows() * kernel.cols() * sizeof(float)));
-
-        // CHECK(cudaMemcpy(d_a, bottom_mat.data(), bottom_mat.rows() * bottom_mat.cols() * sizeof(float), cudaMemcpyHostToDevice));
-        // CHECK(cudaMemcpy(d_k, kernel.data(), kernel.rows() * kernel.cols() * sizeof(float), cudaMemcpyHostToDevice));
-        // CHECK(cudaMemcpy(d_b, new_top_mat.data(), new_top_mat.rows() * new_top_mat.cols() * sizeof(float), cudaMemcpyHostToDevice));
-
-        // dim3 block(32, 32);
-        // dim3 grid(ceilDiv(top_mat.cols(), block.x), ceilDiv(top_mat.rows(), block.y));
-        // kernelConvolution<<<grid, block>>>(
-        //   d_a, bottom_mat.rows(), bottom_mat.cols(),
-        //   d_k, kernel.rows(), kernel.cols(),
-        //   d_b, top_mat.rows(), top_mat.cols()
-        // );
-        
-        // CHECK(cudaMemcpy(new_top_mat.data(), d_b, new_top_mat.rows() * new_top_mat.cols() * sizeof(float), cudaMemcpyDeviceToHost));
-        // CHECK(cudaFree(d_a));
-        // CHECK(cudaFree(d_b));
-        // CHECK(cudaFree(d_k));
-
-        // top_mat = new_top_mat;
-        // top_mat.array() += bias(c_out, 0);
-      }
-    }
-  }
-
-  for (int i = 0; i < n_sample; i ++) {
-    CHECK(cudaStreamDestroy(streams[i]));
-    CHECK(cudaGetLastError());
-  }
-
-  CHECK(cudaMemcpy(top.data(), d_top, top.rows() * top.cols() * sizeof(float), cudaMemcpyDeviceToHost));
-  CHECK(cudaFree(d_top));
-  CHECK(cudaFree(d_bottom));
-  CHECK(cudaFree(d_weight));
-
-  for (int i = 0; i < n_sample; i ++) {
-    for (int c = 0; c < channel_out; c ++) {
-      top.row(i).middleCols(hw_out * c, hw_out).array() += bias(c, 0);
-    }
-  }
-
-  bottom.transposeInPlace();
-  top.transposeInPlace();
 }
 
 // col2im, used for grad_bottom
