@@ -171,11 +171,7 @@ int main(int argc, char* argv[]) {
         std::cout << ith_batch << "-th grad: " << std::endl;
         dnn.check_gradient(x_batch, target_batch, 10);
       }
-      std::vector<float> timings = dnn.forward(x_batch);
-
-      for (int i = 0; i < dnn.num_layers(); i ++) {
-        forward_timings[i] += timings[i];
-      }
+      dnn.forward(x_batch);
 
       dnn.backward(x_batch, target_batch);
       // display

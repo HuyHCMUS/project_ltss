@@ -2,26 +2,13 @@
 
 using namespace std::chrono;
 
-std::vector<float> Network::forward(const Matrix& input) {
+void Network::forward(const Matrix& input) {
   if (layers.empty())
-    return {};
-
-  std::vector<float> timing(layers.size());
-
-  for (int i = 0; i < layers.size(); i++) {
-    auto start = high_resolution_clock::now();
-
-    if (i > 0)
-      layers[i]->forward(layers[i-1]->output());
-    else
-      layers[i]->forward(input);
-
-    auto duration = duration_cast<milliseconds>(high_resolution_clock::now() - start);
-    float duration_s = duration.count() / 1000.0f;
-    timing[i] = duration_s;
+    return;
+  layers[0]->forward(input);
+  for (int i = 1; i < layers.size(); i++) {
+    layers[i]->forward(layers[i-1]->output());
   }
-
-  return timing;
 }
 
 void Network::backward(const Matrix& input, const Matrix& target) {
