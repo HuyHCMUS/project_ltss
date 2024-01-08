@@ -1,18 +1,21 @@
-# mini-dnn-cpp
-**mini-dnn-cpp** is a C++ demo of deep neural networks. It is implemented purely in C++, whose only dependency, Eigen, is header-only. 
+**Tên nhóm: HTH**
 
-## Usage
-Download and unzip [MNIST](http://yann.lecun.com/exdb/mnist/) dataset in `mini-dnn-cpp/data/mnist/`.
+**Thành viên:**
+- 20120494 - Lê Xuân Huy
+- 20120089 - Lê Xuân Hoàng
+- 20120422 - Nguyễn Thị Ánh Tuyết
 
-```shell
+Cách chạy: Xem demo [Run-Lenet5](https://colab.research.google.com/drive/1B3C4PLaVH6pxKBII19HIXLLOWmGbQFMr?usp=sharing)
+
+```
 mkdir build
 cd build
-cmake ..
+cmake -DCMAKE_C_COMPILER=/usr/local/cuda/bin/nvcc -DCMAKE_CXX_COMPILER=/usr/local/cuda/bin/nvcc ..
 make
 ```
+Test:
+- So sánh với cpu: chạy `./demo test <phiên bản>`.
+- So sánh 2 phiên bản: chạy `./demo test <phiên bản 1> <phiên bản 2>`.
+Run:
+- Chạy `./demo run <phiên bản>`
 
-Run `./demo`.
-
-Result: 
-simple neural network with 3 FC layers can obtain `0.97+` accuracy on MNIST testset.
-LeNet-like CNN can obtain `0.98+` accuracy on MNIST testset.
