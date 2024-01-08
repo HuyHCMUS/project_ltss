@@ -17,6 +17,7 @@ make
 Test:
 - So sánh với cpu: chạy `./demo test <phiên bản>`.
 - So sánh 2 phiên bản: chạy `./demo test <phiên bản 1> <phiên bản 2>`.
+  
 Run:
 - Chạy `./demo run <phiên bản>`
 
