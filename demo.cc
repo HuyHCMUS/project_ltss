@@ -29,6 +29,15 @@
 #include "src/optimizer.h"
 #include "src/optimizer/sgd.h"
 
+void printTiming(std::vector<float> &timings) {
+  for (int i = 0; i < timings.size(); i ++) {
+    std::cout
+      << "L" << i
+      << " (" << timings[i] << "s)"
+      << (i < timings.size() - 1 ? " -> " : "\n");
+  }
+}
+
 Layer* make_conv_layer(char* device, int channel_in, int height_in, int width_in, int channel_out, int height_kernel, int width_kernel, int stride = 1, int pad_w = 0, int pad_h = 0) {
   if (strcmp(device, "cpu") == 0) {
     return (Layer *)new Conv(channel_in, height_in, width_in, channel_out, height_kernel, width_kernel, stride, pad_w, pad_h);
@@ -162,12 +171,18 @@ int main(int argc, char* argv[]) {
         std::cout << ith_batch << "-th grad: " << std::endl;
         dnn.check_gradient(x_batch, target_batch, 10);
       }
-      dnn.forward(x_batch);
+      std::vector<float> timings = dnn.forward(x_batch);
+
+      for (int i = 0; i < dnn.num_layers(); i ++) {
+        forward_timings[i] += timings[i];
+      }
 
       dnn.backward(x_batch, target_batch);
       // display
       if (ith_batch % 50 == 0 && ith_batch > 0) {
         std::cout << ith_batch << "-th batch, loss: " << dnn.get_loss() << std::endl;
+        printTiming(forward_timings);
+        forward_timings = std::vector<float>(dnn.num_layers(), 0);
       }
       // optimize
       dnn.update(opt);
