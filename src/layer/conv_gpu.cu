@@ -49,6 +49,44 @@ void ConvGPU::im2col(const Vector& image, Matrix& data_col) {
   }
 }
 
+__global__ void kernelConvolution(
+  float* inp, int h_in, int w_in,
+  float* weight, int h_kernel, int w_kernel,
+  float* out, int h_out, int w_out,
+  int pad_w = 0, int pad_h = 0
+) {
+  int r_out = blockIdx.y * blockDim.y + threadIdx.y;
+  int c_out = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (r_out >= h_out || c_out >= w_out) {
+    return;
+  }
+
+  float sum = 0;
+
+  for (int r_off = - h_kernel / 2; r_off <= h_kernel / 2; r_off++) {
+    for (int c_off = - w_kernel / 2; c_off <= w_kernel / 2; c_off++) {
+      int r_kernel = r_off + h_kernel / 2;
+      int c_kernel = c_off + w_kernel / 2;
+      float weight_val = weight[r_kernel * w_kernel + c_kernel];
+
+      int r_in = r_out + r_off + w_in - w_out;
+      int c_in = c_out + c_off + h_in - h_out;
+
+      float inp_val = (
+        0 <= r_in && r_in < h_in &&
+        0 <= c_in && c_in < w_in
+        ? inp[r_in * w_in + c_in]
+        : 0
+      );
+
+      sum += inp_val * weight_val;
+    }
+  }
+
+  atomicAdd(&out[r_out * w_out + c_out], sum);
+}
+
 void ConvGPU::forward(const Matrix& btm) {
   Matrix bottom = btm;
 
@@ -128,44 +166,6 @@ void ConvGPU::forward(const Matrix& btm) {
 
   bottom.transposeInPlace();
   top.transposeInPlace();
-}
-
-__global__ void kernelConvolution(
-  float* inp, int h_in, int w_in,
-  float* weight, int h_kernel, int w_kernel,
-  float* out, int h_out, int w_out,
-  int pad_w = 0, int pad_h = 0
-) {
-  int r_out = blockIdx.y * blockDim.y + threadIdx.y;
-  int c_out = blockIdx.x * blockDim.x + threadIdx.x;
-
-  if (r_out >= h_out || c_out >= w_out) {
-    return;
-  }
-
-  float sum = 0;
-
-  for (int r_off = - h_kernel / 2; r_off <= h_kernel / 2; r_off++) {
-    for (int c_off = - w_kernel / 2; c_off <= w_kernel / 2; c_off++) {
-      int r_kernel = r_off + h_kernel / 2;
-      int c_kernel = c_off + w_kernel / 2;
-      float weight_val = weight[r_kernel * w_kernel + c_kernel];
-
-      int r_in = r_out + r_off + w_in - w_out;
-      int c_in = c_out + c_off + h_in - h_out;
-
-      float inp_val = (
-        0 <= r_in && r_in < h_in &&
-        0 <= c_in && c_in < w_in
-        ? inp[r_in * w_in + c_in]
-        : 0
-      );
-
-      sum += inp_val * weight_val;
-    }
-  }
-
-  atomicAdd(&out[r_out * w_out + c_out], sum);
 }
 
 // col2im, used for grad_bottom
