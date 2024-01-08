@@ -73,7 +73,8 @@ int main(int argc, char* argv[]) {
   std::cout << "Using device: " << device << std::endl;
 
   // data
-  MNIST dataset("../data/mnist/");
+  //MNIST dataset("../data/mnist/");
+  MNIST dataset("../data/fashion_mnist/");
   dataset.read();
   int n_train = dataset.train_data.cols();
   int dim_in = dataset.train_data.rows();
